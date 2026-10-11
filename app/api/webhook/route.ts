@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 
 import { getBot } from "@/lib/bot-cache";
 
-export const runtime = "nodejs";
-
 export async function POST(request: Request) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
 
