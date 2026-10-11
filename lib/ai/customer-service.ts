@@ -731,11 +731,16 @@ Pada percobaan ini:
 
     const raw = completion.choices[0]?.message?.content?.trim();
 
+    console.log("[AI MODEL]", completion.model);
+
+    console.log("[AI RAW DEBUG]", JSON.stringify(raw));
+
     if (!raw) {
+      console.warn("[AI] Empty response.");
+
       return null;
     }
 
-    // Tidak pernah mengirim raw output.
     return cleanCustomerOutput(raw);
   }
 
