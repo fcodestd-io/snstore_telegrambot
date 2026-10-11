@@ -59,7 +59,7 @@ export function setupBot(token: string, apiKey: string) {
   const askCustomerService = createCustomerService(apiKey);
 
   // ========================================================
-  // GENERAL HELPERS
+  // HELPERS
   // ========================================================
 
   function isPrivate(ctx: Context) {
@@ -70,13 +70,9 @@ export function setupBot(token: string, apiKey: string) {
     try {
       await ctx.sendChatAction("typing");
     } catch {
-      // Tidak penting jika gagal.
+      // Typing indicator bukan proses penting.
     }
   }
-
-  // ========================================================
-  // TEXT NORMALIZER
-  // ========================================================
 
   function normalizeText(value: string) {
     return value
@@ -87,7 +83,7 @@ export function setupBot(token: string, apiKey: string) {
   }
 
   // ========================================================
-  // PRODUCTS + STOCK
+  // PRODUCT DATA
   // ========================================================
 
   async function getProductsWithStock(): Promise<ProductWithStock[]> {
@@ -123,6 +119,9 @@ export function setupBot(token: string, apiKey: string) {
 
   // ========================================================
   // PRODUCT MATCHER
+  //
+  // Dipakai untuk payment proof.
+  // BUKAN untuk meng-hardcode percakapan customer.
   // ========================================================
 
   function findProduct(message: string, productList: ProductWithStock[]) {
@@ -135,18 +134,10 @@ export function setupBot(token: string, apiKey: string) {
       .find((product) => {
         const productName = normalizeText(product.name);
 
-        // Full name.
         if (normalized.includes(productName)) {
           return true;
         }
 
-        // Alias kata pertama.
-        //
-        // AM Premium 1 Tahun
-        // -> AM
-        //
-        // Canva Pro
-        // -> Canva
         const firstWord = productName.split(" ")[0];
 
         if (firstWord.length >= 2 && words.includes(firstWord)) {
@@ -158,7 +149,7 @@ export function setupBot(token: string, apiKey: string) {
   }
 
   // ========================================================
-  // HTML CHUNK
+  // HTML CHUNKS
   // ========================================================
 
   async function replyHtmlChunked(ctx: Context, text: string) {
@@ -211,12 +202,14 @@ export function setupBot(token: string, apiKey: string) {
     } catch (error) {
       console.error("[Catalog Error]", error);
 
-      await ctx.reply("Gagal mengambil katalog. Silakan coba lagi.");
+      await ctx.reply(
+        "Maaf Kak, katalog sedang gagal dimuat. Coba lagi sebentar ya 🙏",
+      );
     }
   }
 
   // ========================================================
-  // PAYMENT
+  // PAYMENTS
   // ========================================================
 
   async function sendPayments(ctx: Context) {
@@ -229,7 +222,7 @@ export function setupBot(token: string, apiKey: string) {
         .where(eq(payments.isActive, true));
 
       if (paymentList.length === 0) {
-        await ctx.reply("Metode pembayaran belum tersedia.");
+        await ctx.reply("Metode pembayaran belum tersedia Kak.");
 
         return;
       }
@@ -238,7 +231,9 @@ export function setupBot(token: string, apiKey: string) {
         let caption = `💳 <b>${escapeHtml(payment.name)}</b>\n\n`;
 
         if (payment.accountNumber) {
-          caption += `Nomor: <code>${escapeHtml(payment.accountNumber)}</code>\n`;
+          caption += `Nomor: <code>${escapeHtml(
+            payment.accountNumber,
+          )}</code>\n`;
         }
 
         if (payment.accountName) {
@@ -253,7 +248,7 @@ export function setupBot(token: string, apiKey: string) {
         caption += "\nContoh: <code>Canva 2</code>";
 
         // --------------------------------------
-        // BASE64
+        // BASE64 IMAGE
         // --------------------------------------
 
         if (payment.imageUrl?.startsWith("data:image")) {
@@ -261,7 +256,7 @@ export function setupBot(token: string, apiKey: string) {
             const base64 = payment.imageUrl.split(",")[1];
 
             if (!base64) {
-              throw new Error("Invalid base64 payment image.");
+              throw new Error("Invalid base64 image.");
             }
 
             await ctx.replyWithPhoto(
@@ -276,12 +271,12 @@ export function setupBot(token: string, apiKey: string) {
 
             continue;
           } catch (error) {
-            console.error("[Payment Base64 Image Error]", error);
+            console.error("[Payment Base64 Error]", error);
           }
         }
 
         // --------------------------------------
-        // URL
+        // REMOTE IMAGE
         // --------------------------------------
 
         if (payment.imageUrl && !payment.imageUrl.startsWith("data:")) {
@@ -298,12 +293,12 @@ export function setupBot(token: string, apiKey: string) {
 
             continue;
           } catch (error) {
-            console.error("[Payment URL Image Error]", error);
+            console.error("[Payment Image URL Error]", error);
           }
         }
 
         // --------------------------------------
-        // FALLBACK TEXT
+        // TEXT FALLBACK
         // --------------------------------------
 
         await ctx.reply(caption, {
@@ -313,7 +308,9 @@ export function setupBot(token: string, apiKey: string) {
     } catch (error) {
       console.error("[Payment Error]", error);
 
-      await ctx.reply("Gagal mengambil metode pembayaran.");
+      await ctx.reply(
+        "Maaf Kak, metode pembayaran sedang gagal dimuat. Coba lagi sebentar ya 🙏",
+      );
     }
   }
 
@@ -332,13 +329,13 @@ export function setupBot(token: string, apiKey: string) {
       const productList = await getProductsWithStock();
 
       if (productList.length === 0) {
-        await ctx.reply("Belum ada produk yang tersedia.");
+        await ctx.reply("Belum ada produk yang tersedia Kak.");
 
         return;
       }
 
       // --------------------------------------
-      // FIND PRODUCT
+      // PRODUCT
       // --------------------------------------
 
       const matchedProduct = findProduct(caption, productList);
@@ -354,14 +351,14 @@ export function setupBot(token: string, apiKey: string) {
 
         await ctx.reply(
           [
-            "⚠️ <b>Saya belum tahu bukti ini untuk produk apa.</b>",
+            "⚠️ <b>Belum tahu bukti ini untuk produk apa.</b>",
             "",
             "Kirim ulang gambar dengan caption nama produk dan jumlah.",
             "",
             "Contoh:",
             "<code>Canva 2</code>",
             "",
-            "<b>Produk tersedia:</b>",
+            "<b>Produk:</b>",
             names,
           ].join("\n"),
           {
@@ -379,7 +376,7 @@ export function setupBot(token: string, apiKey: string) {
       const quantity = Math.max(1, parseQuantity(caption));
 
       // --------------------------------------
-      // STOCK CHECK
+      // STOCK
       // --------------------------------------
 
       if (selectedProduct.stock < quantity) {
@@ -418,7 +415,7 @@ export function setupBot(token: string, apiKey: string) {
 
       if (pendingOrders.length >= MAX_PENDING_ORDERS) {
         await ctx.reply(
-          `Kak masih memiliki ${MAX_PENDING_ORDERS} pesanan yang menunggu verifikasi. Tunggu Admin memprosesnya terlebih dahulu ya 🙏`,
+          `Kak masih punya ${MAX_PENDING_ORDERS} order yang menunggu verifikasi. Tunggu Admin memprosesnya dulu ya 🙏`,
         );
 
         return;
@@ -468,7 +465,7 @@ export function setupBot(token: string, apiKey: string) {
       );
 
       // --------------------------------------
-      // SAVE CONTEXT
+      // MEMORY
       // --------------------------------------
 
       await saveChatMessage(
@@ -483,131 +480,12 @@ export function setupBot(token: string, apiKey: string) {
         `Bukti pembayaran order #${order.id} diterima dan sedang menunggu verifikasi Admin.`,
       );
     } catch (error) {
-      console.error("[Payment Proof Error]", error);
+      console.error("[Proof Error]", error);
 
       await ctx.reply(
-        "Gagal memproses bukti pembayaran. Silakan coba kirim ulang.",
+        "Maaf Kak, bukti pembayaran gagal diproses. Coba kirim ulang ya 🙏",
       );
     }
-  }
-
-  // ========================================================
-  // LOCAL PRODUCT FALLBACK
-  // ========================================================
-
-  async function localProductReply(ctx: Context, message: string) {
-    const productList = await getProductsWithStock();
-
-    const product = findProduct(message, productList);
-
-    if (!product) {
-      return null;
-    }
-
-    if (product.stock <= 0) {
-      return `Maaf Kak, ${product.name} sedang habis 🙏`;
-    }
-
-    const normalized = normalizeText(message);
-
-    const quantity = Math.max(1, parseQuantity(message));
-
-    // Pertanyaan ketersediaan sederhana.
-    const availabilityWords = [
-      "ada",
-      "ready",
-      "tersedia",
-      "masih",
-      "msh",
-      "stok",
-      "stock",
-    ];
-
-    const asksAvailability = availabilityWords.some((word) =>
-      normalized.split(" ").includes(word),
-    );
-
-    const asksPrice = ["harga", "hrg", "berapa", "brp"].some((word) =>
-      normalized.split(" ").includes(word),
-    );
-
-    if (asksAvailability && !asksPrice && quantity === 1) {
-      return `${product.name} masih ada Kak 👍 Stoknya ${product.stock} akun, harganya Rp ${formatRupiah(product.price)}.`;
-    }
-
-    if (quantity > product.stock) {
-      return [
-        `Stok ${product.name} saat ini hanya ${product.stock} akun Kak.`,
-        `Harga per akun Rp ${formatRupiah(product.price)}.`,
-      ].join("\n");
-    }
-
-    const total = product.price * quantity;
-
-    if (asksPrice || quantity > 1) {
-      return [
-        `${quantity} ${product.name} totalnya Rp ${formatRupiah(total)} Kak 👍`,
-        `Stok tersedia ${product.stock} akun.`,
-      ].join("\n");
-    }
-
-    return [
-      `${product.name} masih tersedia Kak 👍`,
-      `Harganya Rp ${formatRupiah(product.price)} dan stoknya ${product.stock} akun.`,
-    ].join("\n");
-  }
-
-  // ========================================================
-  // LOCAL GENERIC FALLBACK
-  // ========================================================
-
-  function localGenericFallback(message: string) {
-    const normalized = normalizeText(message);
-
-    const greetings = [
-      "halo",
-      "hai",
-      "hi",
-      "hello",
-      "p",
-      "ping",
-      "test",
-      "tes",
-      "cek",
-    ];
-
-    if (greetings.includes(normalized)) {
-      return "Siap Kak, botnya aktif 👍 Ada produk yang mau ditanyakan?";
-    }
-
-    if (
-      normalized.includes("makasih") ||
-      normalized.includes("terima kasih") ||
-      normalized === "thanks" ||
-      normalized === "thank you"
-    ) {
-      return "Sama-sama Kak 🙏";
-    }
-
-    if (
-      normalized.includes("kamu siapa") ||
-      normalized.includes("siapa kamu")
-    ) {
-      return "Aku asisten virtual SN Store, Kak 😄 Ada produk yang mau ditanyakan?";
-    }
-
-    if (
-      normalized.includes("model apa") ||
-      normalized.includes("pake model") ||
-      normalized.includes("pakai model") ||
-      normalized.includes("openrouter") ||
-      normalized.includes("system prompt") ||
-      normalized.includes("prompt kamu")
-    ) {
-      return "Aku asisten virtual SN Store, Kak 😄 Ada produk yang mau ditanyakan?";
-    }
-
-    return "Maaf Kak, maksudnya yang mana ya? Kasih sedikit konteks biar aku bantu.";
   }
 
   // ========================================================
@@ -623,15 +501,16 @@ export function setupBot(token: string, apiKey: string) {
       [
         "👋 <b>Selamat datang di SN Store!</b>",
         "",
-        "Kak bisa langsung chat seperti biasa.",
+        "Aku asisten virtual SN Store.",
+        "Kak bisa langsung chat seperti biasa 😄",
         "",
         "Contoh:",
-        '• "AM masih ada?"',
-        '• "Kalau ambil 3 berapa?"',
         '• "Ada produk apa aja?"',
-        '• "Mau bayar pakai QRIS"',
+        '• "AM masih ada?"',
+        '• "Kalau ambil 2 berapa?"',
+        '• "Mau lihat payment"',
         "",
-        "Menu cepat:",
+        "Shortcut:",
         "📦 /katalog",
         "💳 /payment",
       ].join("\n"),
@@ -666,7 +545,7 @@ export function setupBot(token: string, apiKey: string) {
   });
 
   // ========================================================
-  // PHOTO
+  // PHOTO PROOF
   // ========================================================
 
   bot.on("photo", async (ctx) => {
@@ -686,7 +565,7 @@ export function setupBot(token: string, apiKey: string) {
   });
 
   // ========================================================
-  // DOCUMENT IMAGE
+  // DOCUMENT PROOF
   // ========================================================
 
   bot.on("document", async (ctx) => {
@@ -699,9 +578,9 @@ export function setupBot(token: string, apiKey: string) {
     if (!document.mime_type || !IMAGE_MIME_TYPES.includes(document.mime_type)) {
       await ctx.reply(
         [
-          "❌ Bukti pembayaran harus berupa gambar.",
+          "Bukti pembayaran harus berupa gambar ya Kak.",
           "",
-          "Format yang didukung:",
+          "Format:",
           "• JPG / JPEG",
           "• PNG",
           "• WebP",
@@ -729,13 +608,11 @@ export function setupBot(token: string, apiKey: string) {
       return;
     }
 
-    const lower = normalizeText(message);
-
     const telegramId = ctx.from.id;
 
     try {
       // ==================================================
-      // CUSTOM COMMAND
+      // CUSTOM / UNKNOWN COMMAND
       // ==================================================
 
       if (message.startsWith("/")) {
@@ -765,68 +642,19 @@ export function setupBot(token: string, apiKey: string) {
             return;
           }
 
-          await ctx.reply(
-            "Command tidak ditemukan Kak. Bisa langsung chat seperti biasa atau gunakan /katalog.",
-          );
-
-          return;
+          // Command tidak dikenal tetap boleh
+          // dipahami AI sebagai percakapan.
         }
       }
 
       // ==================================================
-      // FAST CATALOG ROUTER
-      // ==================================================
-
-      const catalogKeywords = [
-        "katalog",
-        "list produk",
-        "daftar produk",
-        "produk apa",
-        "produk apa aja",
-        "ada apa aja",
-        "jual apa",
-        "ready apa",
-      ];
-
-      if (catalogKeywords.some((keyword) => lower.includes(keyword))) {
-        await sendCatalog(ctx);
-
-        return;
-      }
-
-      // ==================================================
-      // FAST PAYMENT ROUTER
-      // ==================================================
-
-      const paymentKeywords = [
-        "qris",
-        "qr code",
-        "rekening",
-        "norek",
-        "no rek",
-        "nomor rekening",
-        "cara bayar",
-        "mau bayar",
-        "bayarnya",
-        "payment",
-        "tf kemana",
-        "tf kmn",
-      ];
-
-      if (paymentKeywords.some((keyword) => lower.includes(keyword))) {
-        await sendPayments(ctx);
-
-        return;
-      }
-
-      // ==================================================
-      // GET HISTORY BEFORE SAVING CURRENT MESSAGE
+      // HISTORY
       // ==================================================
 
       const history = await getChatHistory(telegramId);
 
       // ==================================================
-      // REALTIME DATA
+      // REALTIME DATABASE CONTEXT
       // ==================================================
 
       const [productList, paymentList] = await Promise.all([
@@ -845,7 +673,7 @@ export function setupBot(token: string, apiKey: string) {
       ]);
 
       // ==================================================
-      // SAVE CURRENT USER MESSAGE
+      // SAVE USER MESSAGE
       // ==================================================
 
       await saveChatMessage(telegramId, "user", message);
@@ -853,80 +681,46 @@ export function setupBot(token: string, apiKey: string) {
       await sendTyping(ctx);
 
       // ==================================================
-      // ASK AI
+      // AI-FIRST
       // ==================================================
 
-      let aiReply: string | null = null;
+      const aiReply = await askCustomerService({
+        message,
 
-      try {
-        aiReply = await askCustomerService({
-          message,
+        products: productList.map((product) => ({
+          name: product.name,
 
-          products: productList.map((product) => ({
-            name: product.name,
+          price: product.price,
 
-            price: product.price,
+          stock: product.stock,
+        })),
 
-            stock: product.stock,
-          })),
+        payments: paymentList,
 
-          payments: paymentList,
-
-          history,
-        });
-      } catch (error) {
-        console.error("[AI Customer Service Error]", error);
-
-        aiReply = null;
-      }
+        history,
+      });
 
       // ==================================================
-      // AI RESPONSE
-      //
-      // HANYA output yang sudah lolos hard guard di
-      // customer-service.ts bisa sampai ke sini.
+      // CLEAN AI RESPONSE
       // ==================================================
 
       if (aiReply) {
         await saveChatMessage(telegramId, "assistant", aiReply);
 
-        // Plain Telegram text.
-        //
-        // Jangan masukkan kembali ke formatter AI lain.
         await ctx.reply(aiReply);
 
         return;
       }
 
       // ==================================================
-      // AI REJECTED / FAILED
+      // AI FAILED TWICE
       //
-      // Jangan pernah gunakan raw AI response.
+      // Tidak mencoba menjawab secara hardcode.
+      // Tidak mengirim raw AI.
       // ==================================================
 
-      console.warn(
-        "[BOT] AI response gagal / diblokir. Menggunakan local fallback.",
-      );
-
-      // ==================================================
-      // PRODUCT FALLBACK
-      // ==================================================
-
-      const productFallback = await localProductReply(ctx, message);
-
-      if (productFallback) {
-        await saveChatMessage(telegramId, "assistant", productFallback);
-
-        await ctx.reply(productFallback);
-
-        return;
-      }
-
-      // ==================================================
-      // GENERIC FALLBACK
-      // ==================================================
-
-      const fallback = localGenericFallback(message);
+      const fallback =
+        "Maaf Kak, tadi aku gagal memproses pesannya 😅 Coba kirim sekali lagi ya.";
 
       await saveChatMessage(telegramId, "assistant", fallback);
 
@@ -935,18 +729,18 @@ export function setupBot(token: string, apiKey: string) {
       console.error("[Text Handler Error]", error);
 
       const fallback =
-        "Maaf Kak, sedang ada kendala sementara. Coba kirim pesannya lagi ya 🙏";
+        "Maaf Kak, lagi ada kendala sementara 😅 Coba kirim pesannya sekali lagi ya.";
 
       try {
         await ctx.reply(fallback);
       } catch {
-        // Ignore secondary error.
+        // Ignore secondary Telegram error.
       }
     }
   });
 
   // ========================================================
-  // GLOBAL ERROR
+  // GLOBAL ERROR HANDLER
   // ========================================================
 
   bot.catch(async (error, ctx) => {
@@ -954,10 +748,10 @@ export function setupBot(token: string, apiKey: string) {
 
     try {
       await ctx.reply(
-        "Maaf Kak, sedang ada kendala sementara. Coba lagi sebentar ya 🙏",
+        "Maaf Kak, lagi ada kendala sementara. Coba lagi sebentar ya 🙏",
       );
     } catch {
-      // Ignore secondary Telegram error.
+      // Ignore secondary error.
     }
   });
 

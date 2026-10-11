@@ -1,18 +1,41 @@
 import "dotenv/config";
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
+async function main() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const baseUrl = process.argv[2];
 
-const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!token) {
+    throw new Error("TELEGRAM_BOT_TOKEN tidak ditemukan di .env");
+  }
 
-if (!token) {
-  console.error("TELEGRAM_BOT_TOKEN belum di-set.");
+  if (!secret) {
+    throw new Error("TELEGRAM_WEBHOOK_SECRET tidak ditemukan di .env");
+  }
 
-  process.exit(1);
-}
+  if (!baseUrl) {
+    throw new Error(
+      "URL production wajib diberikan.\n" +
+        "Contoh: pnpm webhook:set https://snstore-telegrambot.vercel.app",
+    );
+  }
 
-async function telegramApi(method: string, body: unknown) {
+  const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
+
+  const webhookUrl = `${cleanBaseUrl}/api/webhook`;
+
+  console.log("====================================");
+  console.log("SN STORE - TELEGRAM WEBHOOK");
+  console.log("====================================");
+  console.log(`URL: ${webhookUrl}`);
+  console.log("");
+
+  // ========================================================
+  // SET WEBHOOK
+  // ========================================================
+
   const response = await fetch(
-    `https://api.telegram.org/bot${token}/${method}`,
+    `https://api.telegram.org/bot${token}/setWebhook`,
     {
       method: "POST",
 
@@ -20,49 +43,62 @@ async function telegramApi(method: string, body: unknown) {
         "Content-Type": "application/json",
       },
 
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        url: webhookUrl,
+
+        secret_token: secret,
+
+        allowed_updates: ["message"],
+
+        drop_pending_updates: true,
+      }),
     },
   );
 
-  return response.json();
-}
+  const result = await response.json();
 
-// Hapus webhook
-if (process.argv.includes("--delete")) {
-  const result = await telegramApi("deleteWebhook", {
-    drop_pending_updates: false,
+  console.log("Set webhook response:");
+  console.dir(result, {
+    depth: null,
   });
 
-  console.log(result);
-} else {
-  // Ambil domain dari argument CLI.
-  const baseUrl = process.argv.slice(2).find((arg) => arg.startsWith("http"));
-
-  if (!baseUrl) {
-    console.error("Domain belum diberikan.");
-
-    console.error("Contoh: pnpm webhook:set https://project.vercel.app");
-
-    process.exit(1);
+  if (!response.ok) {
+    throw new Error("Telegram gagal memasang webhook.");
   }
 
-  if (!secret) {
-    console.error("TELEGRAM_WEBHOOK_SECRET belum di-set.");
+  console.log("");
+  console.log("Webhook berhasil dipasang.");
+  console.log("");
 
-    process.exit(1);
-  }
+  // ========================================================
+  // CHECK WEBHOOK
+  // ========================================================
 
-  const webhookUrl = `${baseUrl.replace(/\/$/, "")}/api/webhook`;
+  const infoResponse = await fetch(
+    `https://api.telegram.org/bot${token}/getWebhookInfo`,
+  );
 
-  const result = await telegramApi("setWebhook", {
-    url: webhookUrl,
+  const info = await infoResponse.json();
 
-    secret_token: secret,
-
-    allowed_updates: ["message"],
+  console.log("Webhook info:");
+  console.dir(info, {
+    depth: null,
   });
 
-  console.log(result);
-
-  console.log("Webhook:", webhookUrl);
+  if (!infoResponse.ok) {
+    throw new Error("Gagal mengambil webhook info.");
+  }
 }
+
+main().catch((error) => {
+  console.error("");
+  console.error("Webhook setup gagal:");
+
+  if (error instanceof Error) {
+    console.error(error.message);
+  } else {
+    console.error(error);
+  }
+
+  process.exitCode = 1;
+});
