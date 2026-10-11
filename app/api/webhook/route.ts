@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import type { Update } from "telegraf/types";
 
 import { getBot } from "@/lib/bot-cache";
+
+// ==========================================================
+// POST /api/webhook
+// ==========================================================
 
 export async function POST(request: Request) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -9,64 +14,80 @@ export async function POST(request: Request) {
 
   const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
-  // -----------------------------------
-  // Environment validation
-  // -----------------------------------
+  // ========================================================
+  // ENV VALIDATION
+  // ========================================================
 
-  if (!secret) {
-    console.error("[Webhook] TELEGRAM_WEBHOOK_SECRET belum dikonfigurasi.");
+  if (!secret || !token || !openRouterApiKey) {
+    console.error("[Webhook] Environment variable belum lengkap.");
 
-    return new NextResponse("Webhook secret belum dikonfigurasi", {
-      status: 503,
-    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Server configuration error",
+      },
+      {
+        status: 503,
+      },
+    );
   }
 
-  if (!token) {
-    console.error("[Webhook] TELEGRAM_BOT_TOKEN belum dikonfigurasi.");
-
-    return new NextResponse("Telegram token belum dikonfigurasi", {
-      status: 503,
-    });
-  }
-
-  if (!openRouterApiKey) {
-    console.error("[Webhook] OPENROUTER_API_KEY belum dikonfigurasi.");
-
-    return new NextResponse("OpenRouter API key belum dikonfigurasi", {
-      status: 503,
-    });
-  }
-
-  // -----------------------------------
-  // Verifikasi request Telegram
-  // -----------------------------------
+  // ========================================================
+  // VERIFY TELEGRAM SECRET
+  // ========================================================
 
   const telegramSecret = request.headers.get("x-telegram-bot-api-secret-token");
 
   if (telegramSecret !== secret) {
-    return new NextResponse("Forbidden", {
-      status: 403,
-    });
+    console.warn("[Webhook] Invalid Telegram secret.");
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Forbidden",
+      },
+      {
+        status: 403,
+      },
+    );
   }
 
-  // -----------------------------------
-  // Process update
-  // -----------------------------------
+  // ========================================================
+  // PARSE TELEGRAM UPDATE
+  // ========================================================
+
+  let update: Update;
 
   try {
-    const update = await request.json();
+    update = (await request.json()) as Update;
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Invalid request body",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
 
+  // ========================================================
+  // PROCESS UPDATE
+  // ========================================================
+
+  try {
     const bot = getBot(token, openRouterApiKey);
 
     await bot.handleUpdate(update);
   } catch (error) {
     console.error("[Webhook Error]", error);
 
-    // Sengaja tetap 200.
-    //
-    // Kalau kita return 500,
-    // Telegram akan mengirim update
-    // yang sama berulang kali.
+    /*
+     * Tetap balas 200 agar error internal bot
+     * tidak menyebabkan Telegram terus
+     * mengirim update yang sama.
+     */
   }
 
   return NextResponse.json({

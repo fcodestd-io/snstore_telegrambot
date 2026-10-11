@@ -1,30 +1,79 @@
 import type { Telegraf } from "telegraf";
 
 import { setupBot } from "@/lib/bot";
-import { getChatHistory, saveChatMessage } from "@/lib/chat-history";
 
-import { createCustomerService } from "@/lib/ai/customer-service";
+// ==========================================================
+// GLOBAL BOT CACHE TYPE
+// ==========================================================
 
-let botInstance: Telegraf | null = null;
+type GlobalBotCache = typeof globalThis & {
+  __telegramBot?: Telegraf;
+  __telegramBotToken?: string;
+  __telegramOpenRouterKey?: string;
+};
 
-export function getBot() {
-  if (botInstance) {
-    return botInstance;
+// ==========================================================
+// GLOBAL CACHE
+// ==========================================================
+
+const globalForBot = globalThis as GlobalBotCache;
+
+// ==========================================================
+// GET BOT
+// ==========================================================
+
+/**
+ * Mengambil instance Telegram bot.
+ *
+ * Instance disimpan di globalThis agar tidak membuat
+ * Telegraf instance baru pada setiap request webhook
+ * selama server instance yang sama masih hidup.
+ */
+export function getBot(token: string, openRouterApiKey: string): Telegraf {
+  // --------------------------------------------------------
+  // RETURN CACHED BOT
+  // --------------------------------------------------------
+
+  if (
+    globalForBot.__telegramBot &&
+    globalForBot.__telegramBotToken === token &&
+    globalForBot.__telegramOpenRouterKey === openRouterApiKey
+  ) {
+    return globalForBot.__telegramBot;
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  // --------------------------------------------------------
+  // CREATE BOT
+  // --------------------------------------------------------
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const bot = setupBot(token, openRouterApiKey);
 
-  if (!token) {
-    throw new Error("TELEGRAM_BOT_TOKEN belum tersedia.");
-  }
+  // --------------------------------------------------------
+  // SAVE CACHE
+  // --------------------------------------------------------
 
-  if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY belum tersedia.");
-  }
+  globalForBot.__telegramBot = bot;
 
-  botInstance = setupBot(token, apiKey);
+  globalForBot.__telegramBotToken = token;
 
-  return botInstance;
+  globalForBot.__telegramOpenRouterKey = openRouterApiKey;
+
+  return bot;
+}
+
+// ==========================================================
+// CLEAR BOT CACHE
+// ==========================================================
+
+/**
+ * Berguna saat development/testing.
+ *
+ * Production normalnya tidak perlu memanggil fungsi ini.
+ */
+export function clearBotCache() {
+  globalForBot.__telegramBot = undefined;
+
+  globalForBot.__telegramBotToken = undefined;
+
+  globalForBot.__telegramOpenRouterKey = undefined;
 }
